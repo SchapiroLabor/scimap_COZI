@@ -153,7 +153,7 @@ Example:
             neighbours = pd.DataFrame(ind.tolist(),
                                       index=data.index)  # neighbour DF
             neighbours.drop(0, axis=1, inplace=True)  # Remove self neighbour
-
+            print(ind)
         # b) Local radius method
         if method == 'radius':
             if verbose:
@@ -175,11 +175,13 @@ Example:
                                    np.argwhere(ind[i] == i))  #remove self
             neighbours = pd.DataFrame(ind.tolist(),
                                       index=data.index)  # neighbour DF
-
+            print(ind)
         # c) Delaunay triangulation method
         if method == 'delaunay':
             if verbose:
-                print("Performing Delaunay triangulation to identify neighbours for every cell")
+                print(
+                    "Performing Delaunay triangulation to identify neighbours for every cell"
+                )
             if z_coordinate is not None:
                 points = data[['x', 'y', 'z']].values
             else:
@@ -199,11 +201,16 @@ Example:
                         neighbours_dict[simplex[j]].add(simplex[i])
 
             # Convert the neighbours dictionary to a list of lists
-            neighbours_list = [list(neighbours) for neighbours in neighbours_dict.values()]
+            neighbours_list = [
+                list(neighbours) for neighbours in neighbours_dict.values()
+            ]
 
             # Ensure each list has the same number of elements by padding with -1 (assuming indices are non-negative)
             max_neigh_len = max(len(neigh) for neigh in neighbours_list)
-            neighbours_list_padded = [neigh + [-1] * (max_neigh_len - len(neigh)) for neigh in neighbours_list]
+            neighbours_list_padded = [
+                neigh + [-1] * (max_neigh_len - len(neigh))
+                for neigh in neighbours_list
+            ]
 
             # Convert to numpy array for consistency with KNN method
             ind = np.array(neighbours_list_padded)
@@ -213,7 +220,7 @@ Example:
 
             # Replace -1 with None
             neighbours.replace(-1, None, inplace=True)
-
+            print(ind)
         # Map Phenotypes to Neighbours
         # Loop through (all functionized methods were very slow)
         phenomap = dict(zip(list(range(len(ind))),
