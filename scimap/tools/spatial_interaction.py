@@ -302,20 +302,21 @@ Example:
         k_max = k.div(total_cell_count, axis=0)
         k_max = k_max.div(k_max.max(axis=1), axis=0).stack()
 
+        ##### Old code
         # DataFrame with the neighbour frequency and P values
-        count = (k_max.values *
-                 direction).values  # adding directionallity to interaction
-        neighbours = pd.DataFrame({
-            'count': count,
-            'p_val': p_values
-        },
-                                  index=k_max.index)
-        #neighbours.loc[neighbours[neighbours['p_val'] > p_val].index,'count'] = np.NaN
-        #del neighbours['p_val']
-        neighbours.columns = [
-            adata_subset.obs[imageid].unique()[0],
-            'pvalue_' + str(adata_subset.obs[imageid].unique()[0])
-        ]
+        #count = (k_max.values * direction).values  # adding directionallity to interaction
+        #neighbours = pd.DataFrame({
+        #    'count': count,
+        #    'p_val': p_values
+        #},
+        #####
+
+        # new code for getting zscores and not counts
+        # DataFrame with the neighbour frequency and P values
+        count = (k_max.values * direction).values # adding directionality to interaction
+        neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values}, index = k_max.index)
+        neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
+                                  'pvalue_' + str(adata_subset.obs[imageid].unique()[0])]
         neighbours = neighbours.reset_index()
         #neighbours = neighbours['count'].unstack()
 
