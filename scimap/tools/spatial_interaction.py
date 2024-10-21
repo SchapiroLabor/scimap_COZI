@@ -25,20 +25,21 @@ from scipy.spatial import Delaunay
 
 
 # Function
-def spatial_interaction(adata,
-                        x_coordinate='X_centroid',
-                        y_coordinate='Y_centroid',
-                        z_coordinate=None,
-                        phenotype='phenotype',
-                        method='radius',
-                        radius=30,
-                        knn=10,
-                        permutation=1000,
-                        imageid='imageid',
-                        subset=None,
-                        pval_method='zscore',
-                        verbose=True,
-                        label='spatial_interaction'):
+def spatial_interaction (adata,
+                         x_coordinate='X_centroid',
+                         y_coordinate='Y_centroid',
+                         z_coordinate=None,
+                         phenotype='phenotype',
+                         method='radius', 
+                         radius=30, 
+                         knn=10,
+                         permutation=1000,
+                         imageid='imageid',
+                         subset=None,
+                         pval_method='zscore',
+                         normalization='total',
+                         verbose=True,
+                         label='spatial_interaction'):
     """
 Parameters:
         adata (anndata.AnnData):  
@@ -59,7 +60,6 @@ Parameters:
         method (str, optional):  
             Method to define neighborhoods: 'radius' for fixed distance, 'knn' for K nearest neighbors and 'delaunay' for Delaunay triangulation.
 
-
         radius (int, optional):  
             Radius for neighborhood definition (applies when method='radius').
 
@@ -77,6 +77,9 @@ Parameters:
 
         pval_method (str, optional):  
             Method for p-value calculation: 'abs' for absolute difference, 'zscore' for z-score based significance.
+
+        normalization (str, optional):
+            Method for normalization: 'total' for total cell count normalization, 'conditional' for conditional normalization (adapted from histocat).
         
         verbose (bool):  
             If set to `True`, the function will print detailed messages about its progress and the steps being executed.
@@ -108,80 +111,66 @@ Example:
         
         ```
     """
-
-    def spatial_interaction_internal(adata_subset, x_coordinate, y_coordinate,
-                                     z_coordinate, phenotype, method, radius,
-                                     knn, permutation, imageid, subset,
-                                     pval_method):
+    
+    
+    def spatial_interaction_internal (adata_subset,
+                                      x_coordinate,
+                                      y_coordinate,
+                                      z_coordinate,
+                                      phenotype,
+                                      method,
+                                      radius,
+                                      knn,
+                                      permutation, 
+                                      imageid,
+                                      subset,
+                                      pval_method,
+                                      normalization):
         if verbose:
-            print("Processing Image: " +
-                  str(adata_subset.obs[imageid].unique()))
-
-        # Create a dataFrame with the necessary inforamtion
+            print("Processing Image: " + str(adata_subset.obs[imageid].unique()))
+        
+        # Create a dataFrame with the necessary information
+        # This is useful for 3D data or 2D data with Z coordinate (multi stacks)
         if z_coordinate is not None:
             if verbose:
                 print("Including Z -axis")
-            data = pd.DataFrame({
-                'x': adata_subset.obs[x_coordinate],
-                'y': adata_subset.obs[y_coordinate],
-                'z': adata_subset.obs[z_coordinate],
-                'phenotype': adata_subset.obs[phenotype]
-            })
+            data = pd.DataFrame({'x': adata_subset.obs[x_coordinate], 'y': adata_subset.obs[y_coordinate], 'z': adata_subset.obs[z_coordinate], 'phenotype': adata_subset.obs[phenotype]})
         else:
-            data = pd.DataFrame({
-                'x': adata_subset.obs[x_coordinate],
-                'y': adata_subset.obs[y_coordinate],
-                'phenotype': adata_subset.obs[phenotype]
-            })
+            data = pd.DataFrame({'x': adata_subset.obs[x_coordinate], 'y': adata_subset.obs[y_coordinate], 'phenotype': adata_subset.obs[phenotype]})
 
+        
         # Select the neighborhood method, knn, radius or delaunay
         # a) KNN method
         if method == 'knn':
             if verbose:
-                print("Identifying the " + str(knn) +
-                      " nearest neighbours for every cell")
+                print("Identifying the " + str(knn) + " nearest neighbours for every cell")
             if z_coordinate is not None:
-                tree = BallTree(data[['x', 'y', 'z']], leaf_size=2)
-                ind = tree.query(data[['x', 'y', 'z']],
-                                 k=knn,
-                                 return_distance=False)
+                tree = BallTree(data[['x','y','z']], leaf_size= 2)
+                ind = tree.query(data[['x','y','z']], k=knn, return_distance= False)
             else:
-                tree = BallTree(data[['x', 'y']], leaf_size=2)
-                ind = tree.query(data[['x', 'y']],
-                                 k=knn,
-                                 return_distance=False)
-            neighbours = pd.DataFrame(ind.tolist(),
-                                      index=data.index)  # neighbour DF
-            neighbours.drop(0, axis=1, inplace=True)  # Remove self neighbour
-            print(ind)
+                tree = BallTree(data[['x','y']], leaf_size= 2)
+                ind = tree.query(data[['x','y']], k=knn, return_distance= False)
+            neighbours = pd.DataFrame(ind.tolist(), index = data.index) # neighbour DF
+            neighbours.drop(0, axis=1, inplace=True) # Remove self neighbour
+            
         # b) Local radius method
         if method == 'radius':
             if verbose:
-                print("Identifying neighbours within " + str(radius) +
-                      " pixels of every cell")
+                print("Identifying neighbours within " + str(radius) + " pixels of every cell")
             if z_coordinate is not None:
-                kdt = BallTree(data[['x', 'y', 'z']], metric='euclidean')
-                ind = kdt.query_radius(data[['x', 'y', 'z']],
-                                       r=radius,
-                                       return_distance=False)
+                kdt = BallTree(data[['x','y','z']], metric='euclidean') 
+                ind = kdt.query_radius(data[['x','y','z']], r=radius, return_distance=False)
             else:
-                kdt = BallTree(data[['x', 'y']], metric='euclidean')
-                ind = kdt.query_radius(data[['x', 'y']],
-                                       r=radius,
-                                       return_distance=False)
+                kdt = BallTree(data[['x','y']], metric='euclidean') 
+                ind = kdt.query_radius(data[['x','y']], r=radius, return_distance=False)
+                
+            for i in range(0, len(ind)): ind[i] = np.delete(ind[i], np.argwhere(ind[i] == i))#remove self
+            neighbours = pd.DataFrame(ind.tolist(), index = data.index) # neighborhood DF
 
-            for i in range(0, len(ind)):
-                ind[i] = np.delete(ind[i],
-                                   np.argwhere(ind[i] == i))  #remove self
-            neighbours = pd.DataFrame(ind.tolist(),
-                                      index=data.index)  # neighbour DF
-            print(ind)
         # c) Delaunay triangulation method
         if method == 'delaunay':
             if verbose:
-                print(
-                    "Performing Delaunay triangulation to identify neighbours for every cell"
-                )
+                print("Performing Delaunay triangulation to identify neighbours for every cell")
             if z_coordinate is not None:
                 points = data[['x', 'y', 'z']].values
             else:
@@ -201,16 +190,11 @@ Example:
                         neighbours_dict[simplex[j]].add(simplex[i])
 
             # Convert the neighbours dictionary to a list of lists
-            neighbours_list = [
-                list(neighbours) for neighbours in neighbours_dict.values()
-            ]
+            neighbours_list = [list(neighbours) for neighbours in neighbours_dict.values()]
 
             # Ensure each list has the same number of elements by padding with -1 (assuming indices are non-negative)
             max_neigh_len = max(len(neigh) for neigh in neighbours_list)
-            neighbours_list_padded = [
-                neigh + [-1] * (max_neigh_len - len(neigh))
-                for neigh in neighbours_list
-            ]
+            neighbours_list_padded = [neigh + [-1] * (max_neigh_len - len(neigh)) for neigh in neighbours_list]
 
             # Convert to numpy array for consistency with KNN method
             ind = np.array(neighbours_list_padded)
@@ -220,144 +204,187 @@ Example:
 
             # Replace -1 with None
             neighbours.replace(-1, None, inplace=True)
-            print(ind)
+
+        ### END OF NEIGHBORHOOD SELECTION ###
         # Map Phenotypes to Neighbours
         # Loop through (all functionized methods were very slow)
-        phenomap = dict(zip(list(range(len(ind))),
-                            data['phenotype']))  # Used for mapping
+        phenomap = dict(zip(list(range(len(ind))), data['phenotype'])) # Used for mapping
         if verbose:
             print("Mapping phenotype to neighbors")
         for i in neighbours.columns:
-            neighbours[i] = neighbours[i].dropna().map(phenomap,
-                                                       na_action='ignore')
-
+            neighbours[i] = neighbours[i].dropna().map(phenomap, na_action='ignore')
+            
         # Drop NA
         neighbours = neighbours.dropna(how='all')
-
+        
         # Collapse all the neighbours into a single column
-        n = pd.DataFrame(neighbours.stack(), columns=["neighbour_phenotype"])
-        n.index = n.index.get_level_values(0)  # Drop the multi index
-
+        n = pd.DataFrame(neighbours.stack(), columns = ["neighbour_phenotype"])
+        n.index = n.index.get_level_values(0) # Drop the multi index
+        
         # Merge with real phenotype
-        n = n.merge(data['phenotype'],
-                    how='inner',
-                    left_index=True,
-                    right_index=True)
-
+        n = n.merge(data['phenotype'], how='inner', left_index=True, right_index=True)
+        
         # Permutation
         if verbose:
-            print('Performing ' + str(permutation) + ' permutations')
+            print('Performing '+ str(permutation) + ' permutations')
 
-        def permutation_pval(data):
-            data = data.assign(neighbour_phenotype=np.random.permutation(
-                data['neighbour_phenotype']))
-            #data['neighbour_phenotype'] = np.random.permutation(data['neighbour_phenotype'])
-            data_freq = data.groupby(['phenotype', 'neighbour_phenotype'],
-                                     observed=False).size().unstack()
+        #### Permutation ####
+        def permutation_pval (data):
+           # Permute the neighbour_phenotype column without affecting the original data structure
+            data = data.assign(neighbour_phenotype=np.random.permutation(data['neighbour_phenotype']))
+            data_freq = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack()
+
+            # Remove duplicate interactions (conditional factor)
+            data = data.reset_index()
+            # Drop the neighbour_phenotype column to get the abundance of cell types
+            data = data.drop(columns=['neighbour_phenotype'])
+            data = data.drop_duplicates()
+            data = data.set_index('index')
+
+            # We noralize the data based on the number of cells of each type with at least one neighbor of another type
+            normalization_factor = data.groupby(['phenotype']).size().unstack()
+            data_freq = data_freq/normalization_factor
             data_freq = data_freq.fillna(0).stack().values
+
             return data_freq
 
-        # Apply function
-        final_scores = Parallel(n_jobs=-1)(delayed(permutation_pval)(data=n)
-                                           for i in range(permutation))
-        perm = pd.DataFrame(final_scores).T
+        def permutation_pval_norm (data):
+            # Permute the neighbour_phenotype column without affecting the original data structure
+            data = data.assign(neighbour_phenotype=np.random.permutation(data['neighbour_phenotype']))
+            data_freq = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack()
 
+            # Remove duplicate interactions (conditional factor)
+            data = data.reset_index()
+            data = data.drop_duplicates()
+            data = data.set_index('index')
+
+            # We noralize the data based on the number of cells of each type with at least one neighbor of another type
+            normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype']).size().unstack()
+            data_freq = data_freq/normalization_factor
+            data_freq = data_freq.fillna(0).stack().values
+
+            return data_freq
+
+
+        # Apply permutation functions depending on normalization
+        if normalization == "total":
+            final_scores = Parallel(n_jobs=-1)(delayed(permutation_pval)(data=n) for i in range(permutation))
+        if normalization == "conditional":
+            final_scores = Parallel(n_jobs=-1)(delayed(permutation_pval_norm)(data=n) for i in range(permutation))
+
+        # Permutation results
+        perm = pd.DataFrame(final_scores).T
+        
         # Consolidate the permutation results
         if verbose:
             print('Consolidating the permutation results')
+
         # Calculate P value
-        # real
-        n_freq = n.groupby(['phenotype', 'neighbour_phenotype'],
-                           observed=False).size().unstack().fillna(0).stack()
+        # N_freq is the observed frequency of each cell type with each of its neighbours (observed number of interactions)
+        if normalization == "total":
+            # Calculate interaction frequencies without dropping any categories
+            data_freq = n.groupby(['phenotype', 'neighbour_phenotype'], observed=False).size().unstack().fillna(0)
+            data = n.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack()
+
+            # Remove duplicate interactions (conditional factor)
+            data = data.reset_index()
+            data = data.drop(columns=['neighbour_phenotype'])
+            data = data.drop_duplicates()
+            data = data.set_index('index')
+
+            # We noralize the data based on the number of cells of each type with at least one neighbor of another type
+            normalization_factor = data.groupby(['phenotype']).size().unstack()
+            data_freq = data_freq/normalization_factor
+            data_freq = data_freq.fillna(0).stack().values
+
+            # Normalize the data_freq by the number of cells of each phenotype
+            n_freq = data_freq.div(phenotype_counts, axis=0).fillna(0).stack()
+
+        # Normalize n_freq if normalization is conditional
+        if normalization == "conditional":
+            # Calculate observed interaction frequencies
+            data = n.assign(neighbour_phenotype=n['neighbour_phenotype'])
+            data_freq = n.groupby(['phenotype', 'neighbour_phenotype'], observed=False).size().unstack()
+
+            # Remove duplicate interactions (conditional factor)
+            data = data.reset_index()
+            data = data.drop_duplicates()
+            data = data.set_index('index')
+
+            normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype']).size().unstack()
+            data_freq = data_freq / normalization_factor
+            n_freq = data_freq.fillna(0).stack()
+
         # permutation
         mean = perm.mean(axis=1)
         std = perm.std(axis=1)
+
         # P-value calculation
         if pval_method == 'abs':
-            # real value - prem value / no of perm
-            p_values = abs(n_freq.values - mean) / (permutation + 1)
+            # Calculate the number of times permuted values exceed the observed
+            p_values = np.sum(perm >= n_freq.values[:, None], axis=1) / (permutation + 1)
             p_values = p_values[~np.isnan(p_values)].values
+
         if pval_method == 'zscore':
-            z_scores = (n_freq.values - mean) / std
+            z_scores = (n_freq.values - mean) / std        
             z_scores[np.isnan(z_scores)] = 0
-            p_values = scipy.stats.norm.sf(abs(z_scores)) * 2
+            p_values = scipy.stats.norm.sf(abs(z_scores))*2
             p_values = p_values[~np.isnan(p_values)]
 
         # Compute Direction of interaction (interaction or avoidance)
-        direction = ((n_freq.values - mean) /
-                     abs(n_freq.values - mean)).fillna(1)
+        direction = ((n_freq.values - mean) / abs(n_freq.values - mean)).fillna(1)
 
-        # Normalize based on total cell count
-        k = n.groupby(['phenotype', 'neighbour_phenotype'],
-                      observed=False).size().unstack().fillna(0)
-        # add neighbour phenotype that are not present to make k a square matrix
-        columns_to_add = dict.fromkeys(np.setdiff1d(k.index, k.columns), 0)
-        k = k.assign(**columns_to_add)
 
-        total_cell_count = data['phenotype'].value_counts()
-        total_cell_count = total_cell_count[
-            k.
-            columns].values  # keep only cell types that are present in the column of k
-        # total_cell_count = total_cell_count.reindex(k.columns).values # replaced by above
-        k_max = k.div(total_cell_count, axis=0)
-        k_max = k_max.div(k_max.max(axis=1), axis=0).stack()
-
-        ##### Old code
         # DataFrame with the neighbour frequency and P values
-        #count = (k_max.values * direction).values  # adding directionallity to interaction
-        #neighbours = pd.DataFrame({
-        #    'count': count,
-        #    'p_val': p_values
-        #},
-        #####
-
-        # new code for getting zscores and not counts
-        # DataFrame with the neighbour frequency and P values
-        count = (k_max.values * direction).values # adding directionality to interaction
-        neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values}, index = k_max.index)
-        neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
+        if pval_method == 'abs':
+            count = (n_freq.values * direction).values # adding directionallity to interaction
+            neighbours = pd.DataFrame({'count': count, 'p_val': p_values}, index=n_freq.index)
+            neighbours.columns = [adata_subset.obs[imageid].unique()[0],
                                   'pvalue_' + str(adata_subset.obs[imageid].unique()[0])]
-        neighbours = neighbours.reset_index()
-        #neighbours = neighbours['count'].unstack()
+            neighbours = neighbours.reset_index()
 
-        # return
+        elif pval_method == 'zscore':
+            count = (n_freq.values * direction).values # adding directionality to interaction
+            neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values}, index = n_freq.index)
+            neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
+                                  'pvalue_' + str(adata_subset.obs[imageid].unique()[0])]
+            neighbours = neighbours.reset_index()
+        
+        # Return the results
         return neighbours
-
+          
+      
     # subset a particular subset of cells if the user wants else break the adata into list of anndata objects
     if subset is not None:
         adata_list = [adata[adata.obs[imageid] == subset]]
     else:
-        adata_list = [
-            adata[adata.obs[imageid] == i]
-            for i in adata.obs[imageid].unique()
-        ]
-
+        adata_list = [adata[adata.obs[imageid] == i] for i in adata.obs[imageid].unique()]
+    
+    
     # Apply function to all images and create a master dataframe
-    # Create lamda function
-    r_spatial_interaction_internal = lambda x: spatial_interaction_internal(
-        adata_subset=x,
-        x_coordinate=x_coordinate,
-        y_coordinate=y_coordinate,
-        z_coordinate=z_coordinate,
-        phenotype=phenotype,
-        method=method,
-        radius=radius,
-        knn=knn,
-        permutation=permutation,
-        imageid=imageid,
-        subset=subset,
-        pval_method=pval_method)
-    all_data = list(map(r_spatial_interaction_internal,
-                        adata_list))  # Apply function
+    # Create lamda function 
+    r_spatial_interaction_internal = lambda x: spatial_interaction_internal (adata_subset=x,
+                                                                             x_coordinate=x_coordinate,
+                                                                             y_coordinate=y_coordinate,
+                                                                             z_coordinate=z_coordinate,
+                                                                             phenotype=phenotype,
+                                                                             method=method,
+                                                                             radius=radius,
+                                                                             knn=knn,
+                                                                             permutation=permutation,
+                                                                             imageid=imageid,
+                                                                             subset=subset,
+                                                                             pval_method=pval_method,
+                                                                             normalization=normalization)
 
-    # Merge all the results into a single dataframe
-    df_merged = reduce(
-        lambda left, right: pd.merge(
-            left, right, on=['phenotype', 'neighbour_phenotype'], how='outer'),
-        all_data)
+    # Apply function to all images
+    all_data = list(map(r_spatial_interaction_internal, adata_list)) # Apply function
+
+    # Merge all the results into a single dataframe    
+    df_merged = reduce(lambda  left,right: pd.merge(left,right,on=['phenotype', 'neighbour_phenotype'], how='outer'), all_data)
 
     # Add to anndata
     adata.uns[label] = df_merged
-
+    
     # return
     return adata
