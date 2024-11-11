@@ -232,19 +232,15 @@ Example:
         def permutation_pval (data):
            # Permute the neighbour_phenotype column without affecting the original data structure
             data = data.assign(neighbour_phenotype=np.random.permutation(data['neighbour_phenotype']))
-            data_freq = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack()
+            k = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack().fillna(0)
+            # add neighbour phenotype that are not present to make k a square matrix
+            columns_to_add = dict.fromkeys(np.setdiff1d(k.index,k.columns), 0)
+            k = k.assign(**columns_to_add)
 
-            # Remove duplicate interactions (conditional factor)
-            data = data.reset_index()
-            # Drop the neighbour_phenotype column to get the abundance of cell types
-            data = data.drop(columns=['neighbour_phenotype'])
-            data = data.drop_duplicates()
-            data = data.set_index('index')
-
-            # We noralize the data based on the number of cells of each type with at least one neighbor of another type
-            normalization_factor = data.groupby(['phenotype']).size().unstack()
-            data_freq = data_freq/normalization_factor
-            data_freq = data_freq.fillna(0).stack().values
+            total_cell_count = data['phenotype'].value_counts()
+            total_cell_count = total_cell_count[k.columns].values # keep only cell types that are present in the column of k
+            # total_cell_count = total_cell_count.reindex(k.columns).values # replaced by above
+            data_freq = k.div(total_cell_count, axis = 0)
 
             return data_freq
 
@@ -258,7 +254,7 @@ Example:
             data = data.drop_duplicates()
             data = data.set_index('index')
 
-            # We noralize the data based on the number of cells of each type with at least one neighbor of another type
+            # We noralize the data based on the number of cells of each type 
             normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype']).size().unstack()
             data_freq = data_freq/normalization_factor
             data_freq = data_freq.fillna(0).stack().values
@@ -283,22 +279,20 @@ Example:
         # N_freq is the observed frequency of each cell type with each of its neighbours (observed number of interactions)
         if normalization == "total":
             # Calculate interaction frequencies without dropping any categories
-            data_freq = n.groupby(['phenotype', 'neighbour_phenotype'], observed=False).size().unstack().fillna(0)
-            data = n.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack()
+            # Normalize based on total cell count
+            k = n.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack().fillna(0)
+            # add neighbour phenotype that are not present to make k a square matrix
+            columns_to_add = dict.fromkeys(np.setdiff1d(k.index,k.columns), 0)
+            k = k.assign(**columns_to_add)
 
-            # Remove duplicate interactions (conditional factor)
-            data = data.reset_index()
-            data = data.drop(columns=['neighbour_phenotype'])
-            data = data.drop_duplicates()
-            data = data.set_index('index')
+            total_cell_count = data['phenotype'].value_counts()
+            total_cell_count = total_cell_count[k.columns].values # keep only cell types that are present in the column of k
+            # total_cell_count = total_cell_count.reindex(k.columns).values # replaced by above
+            n_freq = k.div(total_cell_count, axis = 0)
 
-            # We noralize the data based on the number of cells of each type with at least one neighbor of another type
-            normalization_factor = data.groupby(['phenotype']).size().unstack()
-            data_freq = data_freq/normalization_factor
-            data_freq = data_freq.fillna(0).stack().values
 
             # Normalize the data_freq by the number of cells of each phenotype
-            n_freq = data_freq.div(phenotype_counts, axis=0).fillna(0).stack()
+            #n_freq = data_freq.div(phenotype_counts, axis=0).fillna(0).stack()
 
         # Normalize n_freq if normalization is conditional
         if normalization == "conditional":
@@ -344,10 +338,12 @@ Example:
             neighbours = neighbours.reset_index()
 
         elif pval_method == 'zscore':
-            count = (n_freq.values * direction).values # adding directionality to interaction
-            neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values}, index = n_freq.index)
+            #count = (n_freq.values * direction).values # adding directionality to interaction
+            count = n_freq.values
+            neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values, 'count':n_freq}, index = n_freq.index)
             neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
-                                  'pvalue_' + str(adata_subset.obs[imageid].unique()[0])]
+                                  'pvalue_' + str(adata_subset.obs[imageid].unique()[0]),
+                                  'count_' + str(adata_subset.obs[imageid].unique()[0])]
             neighbours = neighbours.reset_index()
         
         # Return the results
