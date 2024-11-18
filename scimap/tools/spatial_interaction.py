@@ -39,6 +39,7 @@ def spatial_interaction (adata,
                          pval_method='zscore',
                          normalization='total',
                          verbose=True,
+                         scaling=False,
                          label='spatial_interaction'):
     """
 Parameters:
@@ -309,9 +310,39 @@ Example:
             data_freq = data_freq / normalization_factor
             n_freq = data_freq.fillna(0).stack()
 
-        # permutation
-        mean = perm.mean(axis=1)
-        std = perm.std(axis=1)
+        
+        # permutation with scaling
+        if scaling == True:
+            perm_scaled = perm.apply(lambda row: 2 * (row - row.min()) / (row.max() - row.min()) - 1, axis=1)
+            mean = perm_scaled.mean(axis=1)
+            std = perm_scaled.std(axis=1)
+            # Initialize a new Series to store scaled `n_freq`
+            n_freq_scaled = n_freq.copy()
+
+            # Normalize `n_freq` using the min and max of the corresponding rows in `perm`
+            for i in range(len(n_freq_scaled)):
+                row_min = perm.iloc[i, :].min()
+                row_max = perm.iloc[i, :].max()
+                n_freq_scaled.iloc[i] = 2 * (n_freq.iloc[i] - row_min) / (row_max - row_min) - 1
+                n_freq = n_freq_scaled
+        else:
+            mean = perm.mean(axis=1)
+            std = perm.std(axis=1)
+
+        #print n_freq with comment in print argument
+        print(f"n_freq: {n_freq[:5]}")
+        print(f"mean: {mean[:5]}")
+        print(f"std: {std[:5]}")
+        ######
+        # no scaling
+        #mean = perm.mean(axis=1)
+        #std = perm.std(axis=1)
+        #######
+        #print(perm.iloc[:5, :10])
+        #print(mean.iloc[:5, :10])
+        #print(f"Shape of perm: {perm.shape}")
+        #print(f"Shape of mean: {mean.shape}")
+ 
 
         # P-value calculation
         if pval_method == 'abs':
@@ -341,6 +372,7 @@ Example:
             #count = (n_freq.values * direction).values # adding directionality to interaction
             count = n_freq.values
             neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values, 'count':n_freq}, index = n_freq.index)
+            print(z_scores.values[:5])
             neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
                                   'pvalue_' + str(adata_subset.obs[imageid].unique()[0]),
                                   'count_' + str(adata_subset.obs[imageid].unique()[0])]
