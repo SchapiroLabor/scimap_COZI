@@ -242,6 +242,7 @@ Example:
             total_cell_count = total_cell_count[k.columns].values # keep only cell types that are present in the column of k
             # total_cell_count = total_cell_count.reindex(k.columns).values # replaced by above
             data_freq = k.div(total_cell_count, axis = 0)
+            data_freq = data_freq.fillna(0).stack().values  # Flatten the matrix
 
             return data_freq
 
@@ -290,6 +291,8 @@ Example:
             total_cell_count = total_cell_count[k.columns].values # keep only cell types that are present in the column of k
             # total_cell_count = total_cell_count.reindex(k.columns).values # replaced by above
             n_freq = k.div(total_cell_count, axis = 0)
+            n_freq = n_freq.fillna(0).stack()  # Flatten the matrix
+            #print(n_freq.shape)
 
 
             # Normalize the data_freq by the number of cells of each phenotype
@@ -309,6 +312,7 @@ Example:
             normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype']).size().unstack()
             data_freq = data_freq / normalization_factor
             n_freq = data_freq.fillna(0).stack()
+            #print(n_freq.shape)
 
         
         # permutation with scaling
