@@ -30,8 +30,8 @@ def spatial_interaction (adata,
                          y_coordinate='Y_centroid',
                          z_coordinate=None,
                          phenotype='phenotype',
-                         method='radius', 
-                         radius=30, 
+                         method='radius',
+                         radius=30,
                          knn=10,
                          permutation=1000,
                          imageid='imageid',
@@ -257,7 +257,7 @@ Example:
             data = data.set_index('index')
 
             # We noralize the data based on the number of cells of each type 
-            normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype']).size().unstack()
+            normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype'],observed=False).size().unstack()
             data_freq = data_freq/normalization_factor
             data_freq = data_freq.fillna(0).stack().values
 
@@ -292,11 +292,6 @@ Example:
             # total_cell_count = total_cell_count.reindex(k.columns).values # replaced by above
             n_freq = k.div(total_cell_count, axis = 0)
             n_freq = n_freq.fillna(0).stack()  # Flatten the matrix
-            #print(n_freq.shape)
-
-
-            # Normalize the data_freq by the number of cells of each phenotype
-            #n_freq = data_freq.div(phenotype_counts, axis=0).fillna(0).stack()
 
         # Normalize n_freq if normalization is conditional
         if normalization == "conditional":
@@ -309,10 +304,10 @@ Example:
             data = data.drop_duplicates()
             data = data.set_index('index')
 
-            normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype']).size().unstack()
+            normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype'],observed=False).size().unstack()
             data_freq = data_freq / normalization_factor
             n_freq = data_freq.fillna(0).stack()
-            #print(n_freq.shape)
+   
 
         
         # permutation with scaling
@@ -332,20 +327,6 @@ Example:
         else:
             mean = perm.mean(axis=1)
             std = perm.std(axis=1)
-
-        #print n_freq with comment in print argument
-        print(f"n_freq: {n_freq[:5]}")
-        print(f"mean: {mean[:5]}")
-        print(f"std: {std[:5]}")
-        ######
-        # no scaling
-        #mean = perm.mean(axis=1)
-        #std = perm.std(axis=1)
-        #######
-        #print(perm.iloc[:5, :10])
-        #print(mean.iloc[:5, :10])
-        #print(f"Shape of perm: {perm.shape}")
-        #print(f"Shape of mean: {mean.shape}")
  
 
         # P-value calculation
@@ -376,7 +357,6 @@ Example:
             #count = (n_freq.values * direction).values # adding directionality to interaction
             count = n_freq.values
             neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values, 'count':n_freq}, index = n_freq.index)
-            print(z_scores.values[:5])
             neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
                                   'pvalue_' + str(adata_subset.obs[imageid].unique()[0]),
                                   'count_' + str(adata_subset.obs[imageid].unique()[0])]
