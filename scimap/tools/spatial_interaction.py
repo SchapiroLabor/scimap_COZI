@@ -240,7 +240,7 @@ Example:
            # Permute the neighbour_phenotype column without affecting the original data structure
             # set seed
             np.random.seed(seed)
-            print("seed", seed)
+           
             data = data.assign(neighbour_phenotype=np.random.permutation(data['neighbour_phenotype']))
             k = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack().fillna(0)
             # add neighbour phenotype that are not present to make k a square matrix
@@ -259,7 +259,7 @@ Example:
             # Permute the neighbour_phenotype column without affecting the original data structure
             # set seed
             np.random.seed(seed)
-            print("seed", seed)
+        
             data = data.assign(neighbour_phenotype=np.random.permutation(data['neighbour_phenotype']))
             data_freq = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack()
 
