@@ -230,8 +230,17 @@ Example:
             print('Performing '+ str(permutation) + ' permutations')
 
         #### Permutation ####
-        def permutation_pval (data):
+        # Set a global seed for reproducibility
+        np.random.seed(42)
+
+        # Generate fixed seeds for all permutations
+        seeds = np.random.randint(0, 1e6, size=permutation) 
+
+        def permutation_pval (data, seed):
            # Permute the neighbour_phenotype column without affecting the original data structure
+            # set seed
+            np.random.seed(seed)
+            print("seed", seed)
             data = data.assign(neighbour_phenotype=np.random.permutation(data['neighbour_phenotype']))
             k = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack().fillna(0)
             # add neighbour phenotype that are not present to make k a square matrix
@@ -246,8 +255,11 @@ Example:
 
             return data_freq
 
-        def permutation_pval_norm (data):
+        def permutation_pval_norm (data, seed):
             # Permute the neighbour_phenotype column without affecting the original data structure
+            # set seed
+            np.random.seed(seed)
+            print("seed", seed)
             data = data.assign(neighbour_phenotype=np.random.permutation(data['neighbour_phenotype']))
             data_freq = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack()
 
@@ -263,12 +275,15 @@ Example:
 
             return data_freq
 
-
+        # Apply permutation functions depending on normalization
+        
         # Apply permutation functions depending on normalization
         if normalization == "total":
-            final_scores = Parallel(n_jobs=-1)(delayed(permutation_pval)(data=n) for i in range(permutation))
+            final_scores = Parallel(n_jobs=-1)(
+                delayed(permutation_pval)(data=n, seed=seeds[i]) for i in range(permutation))
         if normalization == "conditional":
-            final_scores = Parallel(n_jobs=-1)(delayed(permutation_pval_norm)(data=n) for i in range(permutation))
+            final_scores = Parallel(n_jobs=-1)(
+                delayed(permutation_pval_norm)(data=n, seed=seeds[i]) for i in range(permutation))
 
         # Permutation results
         perm = pd.DataFrame(final_scores).T
