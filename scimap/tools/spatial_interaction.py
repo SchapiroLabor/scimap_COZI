@@ -240,19 +240,15 @@ Example:
            # Permute the neighbour_phenotype column without affecting the original data structure
             # set seed
             np.random.seed(seed)
-           
             data = data.assign(neighbour_phenotype=np.random.permutation(data['neighbour_phenotype']))
-            k = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack().fillna(0)
+            #print(data)
+            k = data.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack()#.fillna(0)
             # add neighbour phenotype that are not present to make k a square matrix
             columns_to_add = dict.fromkeys(np.setdiff1d(k.index,k.columns), 0)
             k = k.assign(**columns_to_add)
-
-            total_cell_count = data['phenotype'].value_counts()
-            total_cell_count = total_cell_count[k.columns].values # keep only cell types that are present in the column of k
-            # total_cell_count = total_cell_count.reindex(k.columns).values # replaced by above
+            total_cell_count = data.reset_index().drop_duplicates(subset=['index', 'phenotype']).groupby('phenotype').size().reindex(k.index, fill_value=0)  # Ensure all categories are included
             data_freq = k.div(total_cell_count, axis = 0)
             data_freq = data_freq.fillna(0).stack().values  # Flatten the matrix
-
             return data_freq
 
         def permutation_pval_norm (data, seed):
@@ -272,7 +268,6 @@ Example:
             normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype'],observed=False).size().unstack()
             data_freq = data_freq/normalization_factor
             data_freq = data_freq.fillna(0).stack().values
-
             return data_freq
 
         # Apply permutation functions depending on normalization
@@ -287,6 +282,7 @@ Example:
 
         # Permutation results
         perm = pd.DataFrame(final_scores).T
+        #print("perm:", perm)
         
         # Consolidate the permutation results
         if verbose:
@@ -297,14 +293,13 @@ Example:
         if normalization == "total":
             # Calculate interaction frequencies without dropping any categories
             # Normalize based on total cell count
-            k = n.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack().fillna(0)
+            k = n.groupby(['phenotype','neighbour_phenotype'],observed=False).size().unstack()#.fillna(0)
             # add neighbour phenotype that are not present to make k a square matrix
             columns_to_add = dict.fromkeys(np.setdiff1d(k.index,k.columns), 0)
             k = k.assign(**columns_to_add)
-
+            #total_cell_count = data['phenotype'].value_counts().reindex(k.columns, fillvalue=0).values
+            #total_cell_count = data.reset_index().drop_duplicates(subset=['index', 'phenotype']).groupby('phenotype').size().reindex(k.index, fill_value=0)  # Ensure all categories are included
             total_cell_count = data['phenotype'].value_counts()
-            total_cell_count = total_cell_count[k.columns].values # keep only cell types that are present in the column of k
-            # total_cell_count = total_cell_count.reindex(k.columns).values # replaced by above
             n_freq = k.div(total_cell_count, axis = 0)
             n_freq = n_freq.fillna(0).stack()  # Flatten the matrix
 
@@ -323,8 +318,6 @@ Example:
             data_freq = data_freq / normalization_factor
             n_freq = data_freq.fillna(0).stack()
    
-
-        
         # permutation with scaling
         if scaling == True:
             perm_scaled = perm.apply(lambda row: 2 * (row - row.min()) / (row.max() - row.min()) - 1, axis=1)
@@ -342,7 +335,6 @@ Example:
         else:
             mean = perm.mean(axis=1)
             std = perm.std(axis=1)
- 
 
         # P-value calculation
         if pval_method == 'abs':
