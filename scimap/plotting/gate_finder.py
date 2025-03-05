@@ -10,8 +10,14 @@
     Subsequently, the identified gating parameters can be applied to the dataset using `sm.pp.rescale`, 
     enabling precise control over data segmentation and analysis based on marker expression levels.
 
+    `gate_finder()` is deprecated and will be removed in a future version. Please use `sm.pl.napariGater()` instead.
+
 ## Function
 """
+
+import warnings
+
+
 
 try:
     import napari
@@ -131,6 +137,13 @@ def gate_finder(
 
         ```
     """
+
+    warnings.warn(
+    "gate_finder() is deprecated and will be removed in a future version. "
+    "Please use sm.pl.napariGater() instead.",
+    FutureWarning,
+    stacklevel=2,
+    )
 
     # If no raw data is available make a copy
     if adata.raw is None:
