@@ -34,6 +34,7 @@ def spatial_interaction (adata,
                          radius=30,
                          knn=10,
                          permutation=1000,
+                         cond_counts_threshold=5,
                          imageid='imageid',
                          subset=None,
                          pval_method='zscore',
@@ -69,6 +70,10 @@ Parameters:
 
         permutation (int, optional):  
             Number of permutations for p-value calculation.
+
+        cond_counts_threshold (int, optional):
+            Minimum number of observed conditional interactions required for a cell type pair to be considered.
+            Pairs with conditional counts below this threshold will be set to 0, only applied when normalization = 'conditional'. Default is 5.
 
         imageid (str, required):  
             Column name in `adata` for image identifiers, useful for analysis within specific images.
@@ -269,8 +274,6 @@ Example:
             data_freq = data_freq/normalization_factor
             data_freq = data_freq.fillna(0).stack().values
             return data_freq
-
-        # Apply permutation functions depending on normalization
         
         # Apply permutation functions depending on normalization
         if normalization == "total":
@@ -315,7 +318,19 @@ Example:
             data = data.set_index('index')
 
             normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype'],observed=False).size().unstack()
+
+            # Calculate percentage of pairs below threshold for warning
+            below_threshold = (normalization_factor < cond_counts_threshold).sum().sum()
+            total_pairs = normalization_factor.size
+            perc_below = (below_threshold / total_pairs) * 100
+            
+            if perc_below > 0 and verbose:
+                print(f"Warning: {perc_below:.1f}% of cell type pairs have counts below {cond_counts_threshold}. "
+                      "Results for these pairs should be interpreted with caution.")
+            
+            mask = normalization_factor < cond_counts_threshold
             data_freq = data_freq / normalization_factor
+            data_freq[mask] = np.nan
             n_freq = data_freq.fillna(0).stack()
    
         # permutation with scaling
