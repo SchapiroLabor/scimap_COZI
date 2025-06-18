@@ -323,7 +323,14 @@ Example:
             below_threshold = (normalization_factor < cond_counts_threshold).sum().sum()
             total_pairs = normalization_factor.size
             perc_below = (below_threshold / total_pairs) * 100
-            
+
+            ### NEW # calculate percentage of cells that are conditional
+            phenotype_counts = data['phenotype'].value_counts()
+            cond_cells = normalization_factor.divide(phenotype_counts, axis=0)
+
+            # Convert to long form
+            cond_cells = cond_cells.stack()
+                        
             if perc_below > 0 and verbose:
                 print(f"Warning: {perc_below:.1f}% of cell type pairs have counts below {cond_counts_threshold}. "
                       "Results for these pairs should be interpreted with caution.")
@@ -378,9 +385,12 @@ Example:
         elif pval_method == 'zscore':
             #count = (n_freq.values * direction).values # adding directionality to interaction
             count = n_freq.values
-            neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values, 'count':n_freq}, index = n_freq.index)
+            neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values, 
+                                       'cond_cells_percentage': cond_cells,#/data['phenotype'].value_counts(), ### new
+                                       'count':n_freq}, index = n_freq.index)
             neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
                                   'pvalue_' + str(adata_subset.obs[imageid].unique()[0]),
+                                  'cond_cells_percentage_' + str(adata_subset.obs[imageid].unique()[0]),### new
                                   'count_' + str(adata_subset.obs[imageid].unique()[0])]
             neighbours = neighbours.reset_index()
         
