@@ -30,11 +30,11 @@ def spatial_interaction (adata,
                          y_coordinate='Y_centroid',
                          z_coordinate=None,
                          phenotype='phenotype',
-                         method='radius',
+                         method='delaunay',
                          radius=30,
                          knn=10,
                          permutation=1000,
-                         cond_counts_threshold=5,
+                         cond_counts_threshold=10,
                          imageid='imageid',
                          subset=None,
                          pval_method='zscore',
@@ -73,7 +73,7 @@ Parameters:
 
         cond_counts_threshold (int, optional):
             Minimum number of observed conditional interactions required for a cell type pair to be considered.
-            Pairs with conditional counts below this threshold will be set to 0, only applied when normalization = 'conditional'. Default is 5.
+            Pairs with conditional counts below this threshold will be set to 0, only applied when normalization = 'conditional'. Default is 10.
 
         imageid (str, required):  
             Column name in `adata` for image identifiers, useful for analysis within specific images.
@@ -305,6 +305,8 @@ Example:
             total_cell_count = data['phenotype'].value_counts()
             n_freq = k.div(total_cell_count, axis = 0)
             n_freq = n_freq.fillna(0).stack()  # Flatten the matrix
+            # Create cond_cells as NaNs with same MultiIndex as n_freq
+            cond_cells = pd.Series(np.nan, index=n_freq.index)
 
         # Normalize n_freq if normalization is conditional
         if normalization == "conditional":
@@ -323,9 +325,17 @@ Example:
             below_threshold = (normalization_factor < cond_counts_threshold).sum().sum()
             total_pairs = normalization_factor.size
             perc_below = (below_threshold / total_pairs) * 100
-            
+
+            ### NEW # calculate percentage of cells that are conditional
+            unique_cells = data.reset_index().drop_duplicates(subset='index')
+            phenotype_counts = unique_cells['phenotype'].value_counts()
+            cond_cells = normalization_factor.divide(phenotype_counts, axis=0)
+
+            # Convert to long form
+            cond_cells = cond_cells.stack()
+                        
             if perc_below > 0 and verbose:
-                print(f"Warning: {perc_below:.1f}% of cell type pairs have counts below {cond_counts_threshold}. "
+                print(f"Warning: {perc_below:.1f}% of cell type pairs have conditional counts below {cond_counts_threshold}. "
                       "Results for these pairs should be interpreted with caution.")
             
             mask = normalization_factor < cond_counts_threshold
@@ -359,7 +369,7 @@ Example:
 
         if pval_method == 'zscore':
             z_scores = (n_freq.values - mean) / std        
-            z_scores[np.isnan(z_scores)] = 0
+            z_scores[np.isnan(z_scores)] = 0 
             p_values = scipy.stats.norm.sf(abs(z_scores))*2
             p_values = p_values[~np.isnan(p_values)]
 
@@ -378,9 +388,12 @@ Example:
         elif pval_method == 'zscore':
             #count = (n_freq.values * direction).values # adding directionality to interaction
             count = n_freq.values
-            neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values, 'count':n_freq}, index = n_freq.index)
+            neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values, 
+                                       'cond_cells_percentage': cond_cells,#/data['phenotype'].value_counts(), ### new
+                                       'count':n_freq}, index = n_freq.index)
             neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
                                   'pvalue_' + str(adata_subset.obs[imageid].unique()[0]),
+                                  'cond_cells_percentage_' + str(adata_subset.obs[imageid].unique()[0]),### new
                                   'count_' + str(adata_subset.obs[imageid].unique()[0])]
             neighbours = neighbours.reset_index()
         
