@@ -327,8 +327,10 @@ Example:
             perc_below = (below_threshold / total_pairs) * 100
 
             ### NEW # calculate percentage of cells that are conditional
+
             unique_cells = data.reset_index().drop_duplicates(subset='index')
             phenotype_counts = unique_cells['phenotype'].value_counts()
+
             cond_cells = normalization_factor.divide(phenotype_counts, axis=0)
 
             # Convert to long form
