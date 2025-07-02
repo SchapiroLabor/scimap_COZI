@@ -34,7 +34,7 @@ def spatial_interaction (adata,
                          radius=30,
                          knn=10,
                          permutation=1000,
-                         cond_counts_threshold=10,
+                         min_celltype_count=10,
                          imageid='imageid',
                          subset=None,
                          pval_method='zscore',
@@ -71,9 +71,9 @@ Parameters:
         permutation (int, optional):  
             Number of permutations for p-value calculation.
 
-        cond_counts_threshold (int, optional):
-            Minimum number of observed conditional interactions required for a cell type pair to be considered.
-            Pairs with conditional counts below this threshold will be set to 0, only applied when normalization = 'conditional'. Default is 10.
+        min_celltype_count (int, optional):
+            Minimum number of cells of a celltype to calculate NEP score. Cells will be filtered out.
+            Default is 10.
 
         imageid (str, required):  
             Column name in `adata` for image identifiers, useful for analysis within specific images.
@@ -141,8 +141,18 @@ Example:
             if verbose:
                 print("Including Z -axis")
             data = pd.DataFrame({'x': adata_subset.obs[x_coordinate], 'y': adata_subset.obs[y_coordinate], 'z': adata_subset.obs[z_coordinate], 'phenotype': adata_subset.obs[phenotype]})
+            # Filter out low-abundance cell types
+            phenotype_counts = data['phenotype'].value_counts()
+            valid_phenotypes = phenotype_counts[phenotype_counts >= min_celltype_count].index
+            data = data[data['phenotype'].isin(valid_phenotypes)]
         else:
             data = pd.DataFrame({'x': adata_subset.obs[x_coordinate], 'y': adata_subset.obs[y_coordinate], 'phenotype': adata_subset.obs[phenotype]})
+            # Filter out low-abundance cell types
+            phenotype_counts = data['phenotype'].value_counts()
+            valid_phenotypes = phenotype_counts[phenotype_counts >= min_celltype_count].index
+            data = data[data['phenotype'].isin(valid_phenotypes)]
+        if verbose:
+            print(f"Retaining {len(valid_phenotypes)} phenotypes with ≥ {min_celltype_count} cells")
 
         
         # Select the neighborhood method, knn, radius or delaunay
@@ -321,28 +331,14 @@ Example:
 
             normalization_factor = data.groupby(['phenotype', 'neighbour_phenotype'],observed=False).size().unstack()
 
-            # Calculate percentage of pairs below threshold for warning
-            below_threshold = (normalization_factor < cond_counts_threshold).sum().sum()
-            total_pairs = normalization_factor.size
-            perc_below = (below_threshold / total_pairs) * 100
-
-            ### NEW # calculate percentage of cells that are conditional
-
+            # calculate percentage of cells that are conditional
             unique_cells = data.reset_index().drop_duplicates(subset='index')
             phenotype_counts = unique_cells['phenotype'].value_counts()
-
             cond_cells = normalization_factor.divide(phenotype_counts, axis=0)
 
             # Convert to long form
             cond_cells = cond_cells.stack()
-                        
-            if perc_below > 0 and verbose:
-                print(f"Warning: {perc_below:.1f}% of cell type pairs have conditional counts below {cond_counts_threshold}. "
-                      "Results for these pairs should be interpreted with caution.")
-            
-            mask = normalization_factor < cond_counts_threshold
             data_freq = data_freq / normalization_factor
-            data_freq[mask] = np.nan
             n_freq = data_freq.fillna(0).stack()
    
         # permutation with scaling
@@ -370,8 +366,7 @@ Example:
             p_values = p_values[~np.isnan(p_values)].values
 
         if pval_method == 'zscore':
-            z_scores = (n_freq.values - mean) / std        
-            z_scores[np.isnan(z_scores)] = 0 
+            z_scores = (n_freq.values - mean) / std
             p_values = scipy.stats.norm.sf(abs(z_scores))*2
             p_values = p_values[~np.isnan(p_values)]
 
@@ -388,16 +383,22 @@ Example:
             neighbours = neighbours.reset_index()
 
         elif pval_method == 'zscore':
-            #count = (n_freq.values * direction).values # adding directionality to interaction
-            count = n_freq.values
-            neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values, 
-                                       'cond_cells_percentage': cond_cells,#/data['phenotype'].value_counts(), ### new
-                                       'count':n_freq}, index = n_freq.index)
-            neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
-                                  'pvalue_' + str(adata_subset.obs[imageid].unique()[0]),
-                                  'cond_cells_percentage_' + str(adata_subset.obs[imageid].unique()[0]),### new
-                                  'count_' + str(adata_subset.obs[imageid].unique()[0])]
-            neighbours = neighbours.reset_index()
+            if normalization == "conditional":
+                # Create a DataFrame with z-scores, p-values, and conditional cell ratios
+                neighbours = pd.DataFrame({'z_score': z_scores.values, 'p_val': p_values, 
+                                           'cond_cell_ratio_': cond_cells,
+                                           'count': normalization_factor.stack()}, index=n_freq.index)
+                neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
+                                      'pvalue_' + str(adata_subset.obs[imageid].unique()[0]),
+                                      'cond_cell_ratio_' + str(adata_subset.obs[imageid].unique()[0]),
+                                      'cond_cell_count_' + str(adata_subset.obs[imageid].unique()[0])]
+                neighbours = neighbours.reset_index()
+
+            elif normalization == "total":
+                neighbours = pd.DataFrame({'z_score':z_scores.values,'p_val': p_values,}, index = n_freq.index)
+                neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
+                                      'pvalue_' + str(adata_subset.obs[imageid].unique()[0])]
+                neighbours = neighbours.reset_index()
         
         # Return the results
         return neighbours
