@@ -357,7 +357,9 @@ Example:
                 n_freq = n_freq_scaled
         else:
             mean = perm.mean(axis=1)
-            std = perm.std(axis=1)
+            std = perm.std(axis=1, ddof=1)
+            # Handle division by zero (replace std=0 with small value)
+            std[std == 0] = 1e-10
 
         # P-value calculation
         if pval_method == 'abs':
@@ -373,7 +375,6 @@ Example:
         # Compute Direction of interaction (interaction or avoidance)
         direction = ((n_freq.values - mean) / abs(n_freq.values - mean)).fillna(1)
 
-
         # DataFrame with the neighbour frequency and P values
         if pval_method == 'abs':
             count = (n_freq.values * direction).values # adding directionallity to interaction
@@ -387,11 +388,13 @@ Example:
                 # Create a DataFrame with z-scores, p-values, and conditional cell ratios
                 neighbours = pd.DataFrame({'z_score': z_scores.values, 'p_val': p_values, 
                                            'cond_cell_ratio_': cond_cells,
-                                           'count': normalization_factor.stack()}, index=n_freq.index)
+                                           'count': normalization_factor.stack()
+                                           }, index=n_freq.index)
                 neighbours.columns = ['zscore_' + str(adata_subset.obs[imageid].unique()[0]),
                                       'pvalue_' + str(adata_subset.obs[imageid].unique()[0]),
                                       'cond_cell_ratio_' + str(adata_subset.obs[imageid].unique()[0]),
-                                      'cond_cell_count_' + str(adata_subset.obs[imageid].unique()[0])]
+                                      'cond_cell_count_' + str(adata_subset.obs[imageid].unique()[0])
+                                      ]
                 neighbours = neighbours.reset_index()
 
             elif normalization == "total":
